@@ -1,0 +1,6 @@
+On peut retrouver la liste des villes notées via les sitemaps du site :
+    - https://www.bien-dans-ma-ville.fr/sitemap.xml
+    - https://www.bien-dans-ma-ville.fr/sitemap-ville.xml
+    - https://www.bien-dans-ma-ville.fr/sitemap-villeavis.xml
+
+On va utiliser https://www.bien-dans-ma-ville.fr/sitemap-villeavis.xml (ce n'est pas un xml...)
