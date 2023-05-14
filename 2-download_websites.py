@@ -11,7 +11,6 @@ import re
 from typing import List, Tuple
 import requests
 from tqdm import tqdm
-from bs4 import BeautifulSoup
 
 @dataclass
 class Arguments:

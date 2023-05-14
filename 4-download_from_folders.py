@@ -1,19 +1,44 @@
-"""Test for scrapping one page, to be used in script 4 i guess...
+"""We used wget with "--spider" option in order to fetch cities's folders,
+this script download all websites using the directory structure
 """
 
+
+from argparse import ArgumentParser
 from dataclasses import dataclass
+import json
 from pathlib import Path
 import re
 from typing import List, Tuple
-
 from bs4 import BeautifulSoup, Tag
+import requests
+from tqdm import tqdm
+
+INPUT_FOLDER_PATH = Path(r"D:\Work\Master\M2\PDS\scrapping\bien-dans-ma-ville\with_wget\www.bien-dans-ma-ville.fr")
+
+OUTPUT_WEBSITE_FOLDER_PATH = Path(r"D:\Work\Master\M2\PDS\scrapping\bien-dans-ma-ville\out\websites_fromwget_folders")
 
 WEBSITE_ROOT = "https://www.bien-dans-ma-ville.fr"
 
-WEBSITES_PATH = Path(r"D:\Work\Master\M2\PDS\scrapping\bien-dans-ma-ville\out\websites")
+# ==== ARGUMENT PARSING ====
+@dataclass
+class Arguments:
+    input_folder_path: Path
+    output_folder_path: Path
 
-# PAGE_PATH = WEBSITES_PATH / "germignac-17175.html"
-PAGE_PATH = WEBSITES_PATH / "gergny-02342.html"
+def fetch_arguments() -> Arguments:
+    parser = ArgumentParser("Scrape websites")
+    parser.add_argument("input_path", help="The folder containing all html files")
+    parser.add_argument("output_path", help="The folder where generated content will go")
+    args = parser.parse_args()
+    
+    input_path = Path(args.input_path)
+    output_path = Path(args.output_path)
+    input_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    return Arguments(input_path, output_path)
+
+# ==== SCRAPPING FUNCTIONS ====
 
 @dataclass
 class Scores:
@@ -31,11 +56,28 @@ class Scores:
                       self.practicality / max
         )
         
+    def to_json(self):
+        return {
+            "security": self.security,
+            "education": self.education,
+            "hobbies": self.hobbies,
+            "environment": self.environment,
+            "practicality": self.practicality
+            
+        }
+        
 @dataclass
 class NearbyCity:
     url: str
     name: str
     contains_scores: bool
+    
+    def to_json(self) -> dict:
+        return {
+            "url": self.url,
+            "name": self.name,
+            "contains_scores": self.contains_scores
+        }
     
 @dataclass
 class CityInformation:
@@ -49,12 +91,24 @@ class CityInformation:
     normalized_scores: Scores
     nearby_cities: List[NearbyCity]
     
+    def to_json(self) -> dict:
+        return {
+            "url": self.url,
+            "title": self.title,
+            "name": self.name,
+            "postal_code": self.postal_code,
+            "insee_code": self.insee_code,
+            "contains_scores": self.contains_scores,
+            "scores": self.scores.to_json(),
+            "normalized_scores": self.normalized_scores.to_json(),
+            "nearby_cities": [n.to_json() for n in self.nearby_cities]
+        }
+    
 def to_website_url(city_title: str) -> str:
     return f"{WEBSITE_ROOT}/{city_title}/avis.html"
 
-def get_insee_code(page_path: Path) -> int:
-    filename = page_path.stem
-    return re.search(r"(\d{5}|\d[A-Z]\d{3})", filename).group(1)
+def get_insee_code(name: Path) -> int:
+    return re.search(r"(\d{5})", name).group(1)
 
 def get_file_content(path: Path) -> str:
     with open(path, "r", encoding="utf-8") as file:
@@ -119,33 +173,24 @@ def find_nearby_cities(soup: BeautifulSoup) -> List[NearbyCity]:
     
     return [find_infos_for_row(row) for row in rows]
 
-def main():
-    soup = load_soup(get_file_content(PAGE_PATH))
-    
-    city_title = PAGE_PATH.stem
-    url = to_website_url(city_title)
-    insee_code = get_insee_code(PAGE_PATH)
-    city = find_city(soup)
-    postal_code = find_postal_code(soup)
-    
-    contains_scores, scores, normalized_scores = find_scores(soup)
+# ==== MAIN ====
 
-    nearby_cities = find_nearby_cities(soup)
-    
-    city_info = CityInformation(
-        url,
-        city_title,
-        city,
-        postal_code,
-        insee_code,
-        contains_scores,
-        scores,
-        normalized_scores,
-        nearby_cities
-    )
-    
-    print(city_info)
-        
+def save_html(city_name, response):
+    data = response.text
+    output_file_path = OUTPUT_WEBSITE_FOLDER_PATH / (city_name + ".html")
+    with output_file_path.open("w", encoding="utf-8") as file:
+        file.write(data)
 
-if __name__ == "__main__":
-    main()
+folders = list(INPUT_FOLDER_PATH.iterdir())
+for path in tqdm(folders, "Iterate though folders"):
+    name = path.name
+    url = "https://www.bien-dans-ma-ville.fr/" + name + "/avis.html"
+    
+    response = requests.get(url)
+    if response.status_code != 200:
+        print("An error happened : " + str(response.status_code))
+        continue
+    
+    save_html(name, response)
+    # save_info(name, url, response)
+    
